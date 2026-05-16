@@ -36,6 +36,7 @@ prisma/schema.prisma
 | GET | `/api/tasks` | Список (query: `status`, `sortBy`, `sortOrder`, `parentId`) |
 | GET | `/api/tasks/:id` | Одна задача з підзадачами |
 | POST | `/api/tasks` | Створити |
+| POST | `/api/tasks/decomposed` | Створити parent + subtasks або лише subtasks (транзакція) |
 | PATCH | `/api/tasks/:id` | Оновити |
 | DELETE | `/api/tasks/:id` | Видалити (каскадно підзадачі) |
 
@@ -43,7 +44,7 @@ prisma/schema.prisma
 
 | Method | Path | Body |
 |--------|------|------|
-| POST | `/api/ai/decompose` | `{ title, description?, createSubtasks?, parentTaskId? }` |
+| POST | `/api/ai/decompose` | `{ title, description? }` |
 | POST | `/api/ai/status-update` | `{ taskId, tone?: casual\|professional\|urgent }` |
 
 ## Запуск

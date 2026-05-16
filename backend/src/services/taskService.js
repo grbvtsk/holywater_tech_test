@@ -85,22 +85,43 @@ export async function deleteTask(id) {
   return { success: true };
 }
 
-export async function createSubtasks(parentId, subtasks) {
-  await getTaskById(parentId);
+export async function createDecomposedTasks({ title, description, parentTaskId, subtasks }) {
+  return prisma.$transaction(async (tx) => {
+    let parentId = parentTaskId;
 
-  const created = await prisma.$transaction(
-    subtasks.map((st) =>
-      prisma.task.create({
+    if (parentId) {
+      const parent = await tx.task.findUnique({ where: { id: parentId } });
+      if (!parent) {
+        const err = new Error('Parent task not found');
+        err.status = 404;
+        throw err;
+      }
+    } else {
+      const parent = await tx.task.create({
         data: {
-          title: st.title,
-          description: st.description || '',
-          priority: st.priority || 'medium',
+          title,
+          description: description || '',
           status: 'todo',
-          parentId,
+          priority: 'medium',
         },
-      })
-    )
-  );
+      });
+      parentId = parent.id;
+    }
 
-  return created;
+    const created = await Promise.all(
+      subtasks.map((st) =>
+        tx.task.create({
+          data: {
+            title: st.title,
+            description: st.description || '',
+            priority: st.priority || 'medium',
+            status: 'todo',
+            parentId,
+          },
+        })
+      )
+    );
+
+    return { parentTaskId: parentId, created };
+  });
 }

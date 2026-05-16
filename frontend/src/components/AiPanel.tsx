@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import type { DecomposeResult, Task } from '@/types/task';
-import { addDecomposedTasks, decomposeTask, generateStatusUpdate } from '@/lib/api';
+import { useDecomposeMutation, useStatusUpdateMutation } from '@/api/ai/aiQuery';
+import { useAddDecomposedTasksMutation } from '@/api/tasks/taskQuery';
 import {
   btnPrimary,
   btnSecondary,
@@ -17,40 +18,37 @@ import {
 
 interface AiPanelProps {
   selectedTask: Task | null;
-  onSubtasksCreated: () => void;
 }
 
-export function AiPanel({ selectedTask, onSubtasksCreated }: AiPanelProps) {
+export function AiPanel({ selectedTask }: AiPanelProps) {
   const [decomposeTitle, setDecomposeTitle] = useState('');
   const [decomposeDesc, setDecomposeDesc] = useState('');
   const [decomposeResult, setDecomposeResult] = useState<DecomposeResult | null>(null);
   const [addedToDevLog, setAddedToDevLog] = useState(false);
   const [statusUpdate, setStatusUpdate] = useState('');
   const [tone, setTone] = useState<'casual' | 'professional' | 'urgent'>('casual');
-  const [loadingDecompose, setLoadingDecompose] = useState(false);
-  const [loadingAdd, setLoadingAdd] = useState(false);
-  const [loadingStatus, setLoadingStatus] = useState(false);
   const [error, setError] = useState('');
+
+  const decomposeMutation = useDecomposeMutation();
+  const addDecomposedMutation = useAddDecomposedTasksMutation();
+  const statusUpdateMutation = useStatusUpdateMutation();
 
   async function handleDecompose(e: React.FormEvent) {
     e.preventDefault();
     if (!decomposeTitle.trim()) return;
 
     setError('');
-    setLoadingDecompose(true);
     setDecomposeResult(null);
     setAddedToDevLog(false);
 
     try {
-      const result = await decomposeTask({
+      const result = await decomposeMutation.mutateAsync({
         title: decomposeTitle.trim(),
         description: decomposeDesc,
       });
       setDecomposeResult(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'AI request failed');
-    } finally {
-      setLoadingDecompose(false);
     }
   }
 
@@ -58,21 +56,17 @@ export function AiPanel({ selectedTask, onSubtasksCreated }: AiPanelProps) {
     if (!decomposeResult?.subtasks?.length) return;
 
     setError('');
-    setLoadingAdd(true);
 
     try {
-      await addDecomposedTasks({
+      await addDecomposedMutation.mutateAsync({
         title: decomposeTitle.trim(),
         description: decomposeDesc,
         parentTaskId: selectedTask?.id,
         subtasks: decomposeResult.subtasks,
       });
       setAddedToDevLog(true);
-      onSubtasksCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add tasks');
-    } finally {
-      setLoadingAdd(false);
     }
   }
 
@@ -80,16 +74,13 @@ export function AiPanel({ selectedTask, onSubtasksCreated }: AiPanelProps) {
     if (!selectedTask) return;
 
     setError('');
-    setLoadingStatus(true);
     setStatusUpdate('');
 
     try {
-      const result = await generateStatusUpdate({ taskId: selectedTask.id, tone });
+      const result = await statusUpdateMutation.mutateAsync({ taskId: selectedTask.id, tone });
       setStatusUpdate(result.update);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'AI request failed');
-    } finally {
-      setLoadingStatus(false);
     }
   }
 
@@ -153,8 +144,8 @@ export function AiPanel({ selectedTask, onSubtasksCreated }: AiPanelProps) {
             />
           </div>
 
-          <button type="submit" className={btnPrimary} disabled={loadingDecompose}>
-            {loadingDecompose ? 'Generating…' : 'Break into subtasks'}
+          <button type="submit" className={btnPrimary} disabled={decomposeMutation.isPending}>
+            {decomposeMutation.isPending ? 'Generating…' : 'Break into subtasks'}
           </button>
         </form>
 
@@ -189,9 +180,9 @@ export function AiPanel({ selectedTask, onSubtasksCreated }: AiPanelProps) {
                 type="button"
                 className={`${btnPrimary} mt-3 w-full`}
                 onClick={handleAddToDevLog}
-                disabled={loadingAdd}
+                disabled={addDecomposedMutation.isPending}
               >
-                {loadingAdd
+                {addDecomposedMutation.isPending
                   ? 'Adding…'
                   : selectedTask
                     ? 'Add subtasks to DevLog'
@@ -228,8 +219,13 @@ export function AiPanel({ selectedTask, onSubtasksCreated }: AiPanelProps) {
                 <option value="urgent">Urgent</option>
               </select>
             </div>
-            <button type="button" className={btnPrimary} onClick={handleStatusUpdate} disabled={loadingStatus}>
-              {loadingStatus ? 'Generating…' : 'Generate update'}
+            <button
+              type="button"
+              className={btnPrimary}
+              onClick={handleStatusUpdate}
+              disabled={statusUpdateMutation.isPending}
+            >
+              {statusUpdateMutation.isPending ? 'Generating…' : 'Generate update'}
             </button>
             {statusUpdate && (
               <div className="mt-4 rounded-lg bg-slate-950 p-3 text-sm">

@@ -2,23 +2,25 @@
 
 import { useState } from 'react';
 import { TaskForm } from '@/components/TaskForm';
+import { useParseVoiceTaskMutation } from '@/api/ai/aiQuery';
+import { useCreateTaskMutation } from '@/api/tasks/taskQuery';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
-import { createTask, parseVoiceTask } from '@/lib/api';
 import { Mic, Square, Sparkles } from 'lucide-react';
 import { btnPrimary, btnRecordStart, btnRecordStop, btnSecondary } from '@/lib/styles';
 import type { CreateTaskInput, ParsedVoiceTask } from '@/types/task';
 
 interface VoiceTaskModalProps {
   onClose: () => void;
-  onCreated: () => void;
 }
 
-export function VoiceTaskModal({ onClose, onCreated }: VoiceTaskModalProps) {
+export function VoiceTaskModal({ onClose }: VoiceTaskModalProps) {
   const speech = useSpeechRecognition();
   const [step, setStep] = useState<'listen' | 'preview'>('listen');
-  const [parsing, setParsing] = useState(false);
   const [preview, setPreview] = useState<ParsedVoiceTask | null>(null);
   const [error, setError] = useState('');
+
+  const parseVoiceMutation = useParseVoiceTaskMutation();
+  const createTaskMutation = useCreateTaskMutation();
 
   function handleClose() {
     speech.reset();
@@ -33,23 +35,19 @@ export function VoiceTaskModal({ onClose, onCreated }: VoiceTaskModalProps) {
     }
 
     setError('');
-    setParsing(true);
     speech.stop();
 
     try {
-      const parsed = await parseVoiceTask(text);
+      const parsed = await parseVoiceMutation.mutateAsync(text);
       setPreview(parsed);
       setStep('preview');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to parse voice input');
-    } finally {
-      setParsing(false);
     }
   }
 
   async function handleConfirm(data: CreateTaskInput) {
-    await createTask(data);
-    onCreated();
+    await createTaskMutation.mutateAsync(data);
     handleClose();
   }
 
@@ -129,9 +127,9 @@ export function VoiceTaskModal({ onClose, onCreated }: VoiceTaskModalProps) {
                 type="button"
                 className={btnPrimary}
                 onClick={handleProcessTranscript}
-                disabled={parsing || !speech.transcript.trim()}
+                disabled={parseVoiceMutation.isPending || !speech.transcript.trim()}
               >
-                {parsing ? 'Processing…' : 'Preview task'}
+                {parseVoiceMutation.isPending ? 'Processing…' : 'Preview task'}
               </button>
               <button type="button" className={btnSecondary} onClick={handleClose}>
                 Cancel

@@ -1,6 +1,7 @@
 import * as taskService from '../services/taskService.js';
 import {
   createTaskSchema,
+  createDecomposedSchema,
   updateTaskSchema,
   listTasksQuerySchema,
 } from '../utils/validation.js';
@@ -29,6 +30,16 @@ export async function createTask(req, res, next) {
     const data = createTaskSchema.parse(req.body);
     const task = await taskService.createTask(data);
     res.status(201).json(task);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function createDecomposed(req, res, next) {
+  try {
+    const data = createDecomposedSchema.parse(req.body);
+    const result = await taskService.createDecomposedTasks(data);
+    res.status(201).json(result);
   } catch (err) {
     next(err);
   }

@@ -47,3 +47,16 @@ export const statusUpdateSchema = z.object({
 export const parseVoiceTaskSchema = z.object({
   transcript: z.string().min(1, 'Transcript is required').max(5000),
 });
+
+export const decomposedSubtaskSchema = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().max(5000).optional().default(''),
+  priority: taskPrioritySchema.optional().default('medium'),
+});
+
+export const createDecomposedSchema = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().max(5000).optional().default(''),
+  parentTaskId: z.string().cuid().optional(),
+  subtasks: z.array(decomposedSubtaskSchema).min(1, 'At least one subtask is required').max(20),
+});

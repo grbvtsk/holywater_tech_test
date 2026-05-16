@@ -1,12 +1,17 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { AiPanel } from '@/components/AiPanel';
 import { TaskCard } from '@/components/TaskCard';
 import { TaskForm } from '@/components/TaskForm';
 import { VoiceTaskModal } from '@/components/VoiceTaskModal';
-import { createTask, deleteTask, fetchTasks, updateTask } from '@/lib/api';
-import { Mic, Sparkles } from 'lucide-react';
+import {
+  useCreateTaskMutation,
+  useDeleteTaskMutation,
+  useTasksQuery,
+  useUpdateTaskMutation,
+} from '@/api/tasks/taskQuery';
+import { Sparkles } from 'lucide-react';
 import { btnPrimary, btnVoice, formGroupClass, labelClass, panelClass, selectClass } from '@/lib/styles';
 import type { CreateTaskInput, Task, TaskStatus } from '@/types/task';
 
@@ -14,63 +19,51 @@ type SortBy = 'priority' | 'createdAt';
 type SortOrder = 'asc' | 'desc';
 
 export default function HomePage() {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState<TaskStatus | ''>('');
   const [sortBy, setSortBy] = useState<SortBy>('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
-  const [selected, setSelected] = useState<Task | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showVoiceTask, setShowVoiceTask] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
 
-  const loadTasks = useCallback(async () => {
-    setError('');
-    try {
-      const data = await fetchTasks({
-        status: statusFilter || undefined,
-        sortBy,
-        sortOrder,
-      });
-      setTasks(data);
-      setSelected((prev) => (prev ? data.find((t) => t.id === prev.id) ?? null : null));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load tasks');
-    } finally {
-      setLoading(false);
-    }
-  }, [statusFilter, sortBy, sortOrder]);
+  const listParams = {
+    status: statusFilter || undefined,
+    sortBy,
+    sortOrder,
+  };
 
-  useEffect(() => {
-    loadTasks();
-  }, [loadTasks]);
+  const { data: tasks = [], isLoading, isError, error } = useTasksQuery(listParams);
+  const createTask = useCreateTaskMutation();
+  const updateTask = useUpdateTaskMutation();
+  const deleteTask = useDeleteTaskMutation();
+
+  const selected = tasks.find((t) => t.id === selectedId) ?? null;
 
   async function handleCreate(data: CreateTaskInput) {
-    await createTask(data);
+    await createTask.mutateAsync(data);
     setShowCreate(false);
-    await loadTasks();
   }
 
   async function handleUpdate(data: CreateTaskInput) {
     if (!editing) return;
-    await updateTask(editing.id, data);
+    await updateTask.mutateAsync({ id: editing.id, data });
     setEditing(null);
-    await loadTasks();
   }
 
   async function handleDelete(id: string) {
     if (!confirm('Delete this task and all subtasks?')) return;
-    await deleteTask(id);
-    if (selected?.id === id) setSelected(null);
-    await loadTasks();
+    await deleteTask.mutateAsync(id);
+    if (selectedId === id) setSelectedId(null);
   }
 
   async function handleDeleteSubtask(id: string) {
     if (!confirm('Delete this subtask?')) return;
-    await deleteTask(id);
-    await loadTasks();
+    await deleteTask.mutateAsync(id);
   }
+
+  const errorMessage =
+    isError && error instanceof Error ? error.message : isError ? 'Failed to load tasks' : '';
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
@@ -142,11 +135,11 @@ export default function HomePage() {
             </div>
           </div>
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          {errorMessage && <p className="text-sm text-red-400">{errorMessage}</p>}
 
           <section className={panelClass}>
             <h2 className="mb-4 text-base font-semibold">Tasks ({tasks.length})</h2>
-            {loading ? (
+            {isLoading ? (
               <p className="py-8 text-center text-slate-500">Loading…</p>
             ) : tasks.length === 0 ? (
               <p className="py-8 text-center text-slate-500">
@@ -158,8 +151,8 @@ export default function HomePage() {
                   <TaskCard
                     key={task.id}
                     task={task}
-                    selected={selected?.id === task.id}
-                    onSelect={setSelected}
+                    selected={selectedId === task.id}
+                    onSelect={(t) => setSelectedId(t.id)}
                     onEdit={setEditing}
                     onDelete={handleDelete}
                     onDeleteSubtask={handleDeleteSubtask}
@@ -170,12 +163,10 @@ export default function HomePage() {
           </section>
         </main>
 
-        <AiPanel selectedTask={selected} onSubtasksCreated={loadTasks} />
+        <AiPanel selectedTask={selected} />
       </div>
 
-      {showVoiceTask && (
-        <VoiceTaskModal onClose={() => setShowVoiceTask(false)} onCreated={loadTasks} />
-      )}
+      {showVoiceTask && <VoiceTaskModal onClose={() => setShowVoiceTask(false)} />}
 
       {showCreate && (
         <div
